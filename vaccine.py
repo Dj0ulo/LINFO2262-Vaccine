@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 # %% Loading data
 test_data = pk.load(open("test.pickle", "rb"))
@@ -30,22 +31,19 @@ train.iloc[:, -6:] = train.iloc[:, -6:]\
 # %% Mean 
 means = train.mean()
 train_no_nan = train.fillna(means)
-# %% Variance features
-var_filename = "train_variances.csv"
-
-# selector = VarianceThreshold()
-# selector.fit(train_no_nan)
-# variances = np.asarray(selector.variances_)
-# np.savetxt(var_filename, variances, delimiter=",")
-
-with open(var_filename) as f:
-    variances = list(map(pd.to_numeric, f.readlines()))
-
-
-
 # %% Filter out null variances
+variances = train_no_nan.var()
 train_var = train_no_nan.iloc[:, np.array(variances) > 0]
-# %%
+# %% Save train
+with open(r"train_nonan_var.pickle", "wb") as output_file:
+  pk.dump(train_var, output_file)
+# %% Load the first prefiltered train data
+train_var = pk.load(open("train_nonan_var.pickle", "rb"))
 
-pca = PCA(n_components=2)
-result = pca.fit_transform(train)
+# %%
+scaler = StandardScaler()
+train_norm = pd.DataFrame(scaler.fit_transform(train_var))
+train_norm.columns = train_var.columns
+
+
+# %%
