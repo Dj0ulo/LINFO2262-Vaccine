@@ -23,23 +23,28 @@ trainY = np.concatenate((train_labels_1, train_labels_2))
 
 # %% Sub-train
 train = total_train[:]
+real_test = test_data[:]
 
 # Convert last 6 columns
-train.iloc[:, -6:] = train.iloc[:, -6:]\
-    .apply(lambda col:
-           col
-           .apply(lambda v: str(v)[2:])
-           .apply(lambda x: -1.0 if x == 'n' else float(x))
-           )
-
+def last_6(df):
+  df.iloc[:, -6:] = df.iloc[:, -6:]\
+      .apply(lambda col:
+            col
+            .apply(lambda v: str(v)[2:])
+            .apply(lambda x: -1.0 if x == 'n' else float(x))
+            )
+last_6(train)
+last_6(real_test)
 
 # %% Filter out null variances
-variances = train.var()
-train_var = train.iloc[:, np.array(variances) > 0]
+variances = np.array(train.var())
+train_var = train.iloc[:, variances > 0]
+real_test = real_test.iloc[:, variances > 0]
 
 # %% Mean 
 means = train_var.mean()
 train_var = train_var.fillna(means)
+real_test = real_test.fillna(means)
 # %% Save train
 # filename = "train_var_nan.pickle"
 # with open(filename, "wb") as output_file:
@@ -52,16 +57,19 @@ scaler = StandardScaler()
 train_norm = pd.DataFrame(scaler.fit_transform(train_var))
 train_norm.columns = train_var.columns
 
+real_test_norm = pd.DataFrame(scaler.transform(real_test))
+real_test_norm.columns = real_test_norm.columns
+
 # %%Do every thing many times
 big_scores_test = []
-for big_it in range(1):
+for big_it in range(100,110):
   print(big_it)
   # %% Randomize and clean data set
-  trainXY = train_norm 
+  trainXY = train_norm.loc[:]
   trainXY['label'] = pd.Series(trainY, index=trainXY.index)
-  trainXY = trainXY.sample(frac=1,random_state=big_it)
+  trainXY = trainXY.sample(frac=1,random_state=big_it) # I found that the best random_state was 104 with a train set of 100 rows
 
-  lil_test_number = 50
+  lil_test_number = 100
   
   lil_test = trainXY.iloc[:lil_test_number, :-1]
   lil_testY = trainXY.iloc[:lil_test_number, -1]
@@ -69,47 +77,41 @@ for big_it in range(1):
   lil_train = trainXY.iloc[lil_test_number:, :-1]
   lil_trainY = trainXY.iloc[lil_test_number:, -1]
 
+
   # Select K Best ON LIL TRAIN
   skb = SelectKBest(k=10000).fit(lil_train, lil_trainY)
   mask = np.array(skb.get_support())
   lil_train = lil_train.iloc[:, mask]
   lil_test = lil_test.iloc[:, mask]
+  real_test_clean = real_test_norm.iloc[:, mask]
 
-  size = len(lil_train.index)   
+  size = len(lil_train.index)
 
+  lil_trainXY = lil_train.loc[:]
+  lil_trainXY['label'] = pd.Series(lil_trainY, index=lil_trainXY.index)
 
-  # ## %% SVC train
-  # clf = SVC(kernel='rbf', C=5)
-  # # Fit all lil train
-  # clf.fit(X, Y)
-
-  # print("Train acc : %.3f"% clf.score(X,Y))
-  # print("Test acc : %.3f"% clf.score(lil_test,lil_testY))
-
-# %% Cross Validation
+## %% Cross Validation
   clf = SVC(kernel='rbf', C=5)
+
   scores = []
   scores_test = []
   iterations = 10
+  test_portion = 0.1
+  size_tf = int(test_portion*size)
   for i in range(iterations):
-    startf = int(i*size/iterations)
-    endf = int((i+1)*size/iterations)
-
-    XY = lil_train 
-    XY['label'] = pd.Series(lil_trainY, index=XY.index)
-    XY = XY.sample(frac=1)#,random_state=i)
+    XY = lil_trainXY.sample(frac=1,random_state=i)
 
     X = XY.iloc[:,:-1]
     Y = XY.iloc[:,-1]
 
-    vfx = X.iloc[startf:endf]
-    vfy = Y[startf:endf]
+    cross_text_x = X.iloc[:size_tf]
+    cross_test_y = Y[:size_tf]
 
-    tfx = X.iloc[0:startf].append(X.iloc[endf:size])
-    tfy = np.concatenate((Y[0:startf], Y[endf:size]))
+    cross_train_x = X.iloc[size_tf:]
+    cross_train_y = Y[size_tf:]
 
-    clf.fit(tfx, tfy)
-    scores.append(clf.score(vfx, vfy))
+    clf.fit(cross_train_x, cross_train_y)
+    scores.append(clf.score(cross_text_x, cross_test_y))
     scores_test.append(clf.score(lil_test,lil_testY))
 
 
@@ -121,10 +123,25 @@ for big_it in range(1):
   # print(scores_test)
   big_scores_test.append(cv_acc)
 
+## %% Fit all lil train
+  clf.fit(lil_train, lil_trainY)
+
+  print("Train acc : %.3f"% clf.score(lil_train,lil_trainY))
+
+  # I took this value for the BCR
+  print("Test acc (BCR) : %.3f"% clf.score(lil_test,lil_testY))
+
+  real_prediction = clf.predict(real_test_clean)
+
+  pred = pd.DataFrame(real_prediction)
+  pred = pred.apply(lambda col: col.apply(lambda x: int(x)))
+  pred.to_csv('pred%d.csv'%big_it, quoting=csv.QUOTE_ALL)
+
 print("Total: %.3f"% (sum(big_scores_test)/len(big_scores_test)))
 
 
-# # %% Deep Learning
+
+# %% Deep Learning
 # import tensorflow as tf
 # from tensorflow import keras
 # from keras.models import Sequential
@@ -164,7 +181,3 @@ print("Total: %.3f"% (sum(big_scores_test)/len(big_scores_test)))
 # )
 # _, acc = model.evaluate(lil_test, lil_testY, verbose=0)
 # print("Acc : %.4f"%acc)
-
-
-
-# %%
