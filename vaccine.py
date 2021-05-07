@@ -21,7 +21,7 @@ total_train = total_train.append(train_data_2)
 
 trainY = np.concatenate((train_labels_1, train_labels_2))
 
-# %% Sub-train
+# %% Copy raw data
 train = total_train[:]
 real_test = test_data[:]
 
@@ -45,12 +45,6 @@ real_test = real_test.iloc[:, variances > 0]
 means = train_var.mean()
 train_var = train_var.fillna(means)
 real_test = real_test.fillna(means)
-# %% Save train
-# filename = "train_var_nan.pickle"
-# with open(filename, "wb") as output_file:
-#   pk.dump(train_var, output_file)
-# %% Load the first prefiltered train data
-# train_var = pk.load(open(filename, "rb"))
 
 # %% Normalize
 scaler = StandardScaler()
@@ -123,16 +117,15 @@ for big_it in range(100,110):
   # print(scores_test)
   big_scores_test.append(cv_acc)
 
-## %% Fit all lil train
+## %% Fit by training on lil_train
   clf.fit(lil_train, lil_trainY)
-
   print("Train acc : %.3f"% clf.score(lil_train,lil_trainY))
 
-  # I took this value for the BCR
+# I took this value for the BCR ---------------------------------------------
   print("Test acc (BCR) : %.3f"% clf.score(lil_test,lil_testY))
 
+# Predict and save
   real_prediction = clf.predict(real_test_clean)
-
   pred = pd.DataFrame(real_prediction)
   pred = pred.apply(lambda col: col.apply(lambda x: int(x)))
   pred.to_csv('pred%d.csv'%big_it, quoting=csv.QUOTE_ALL)
@@ -142,42 +135,42 @@ print("Total: %.3f"% (sum(big_scores_test)/len(big_scores_test)))
 
 
 # %% Deep Learning
-# import tensorflow as tf
-# from tensorflow import keras
-# from keras.models import Sequential
-# from keras.layers import Dense
+import tensorflow as tf
+from tensorflow import keras
+from keras.models import Sequential
+from keras.layers import Dense
 
-# model = keras.Sequential()
+model = keras.Sequential()
 
-# model.add(Dense(
-#     units=1000,
-#     activation='relu',
-#     kernel_initializer=keras.initializers.random_normal(),
-#     bias_initializer=keras.initializers.random_normal()
-# ))
-# model.add(Dense(
-#     units=100,
-#     activation='relu',
-#     kernel_initializer=keras.initializers.random_normal(),
-#     bias_initializer=keras.initializers.random_normal()
-# ))
-# model.add(keras.layers.Dense(
-#     units=1,
-#     activation='sigmoid',
-#     kernel_initializer=keras.initializers.random_normal(),
-#     bias_initializer=keras.initializers.random_normal()
-# ))
-# model.compile(
-#   optimizer=keras.optimizers.Adam(learning_rate=1e-5),
-#   loss="binary_crossentropy",
-#   metrics=['accuracy']
-# )
+model.add(Dense(
+    units=1000,
+    activation='relu',
+    kernel_initializer=keras.initializers.random_normal(),
+    bias_initializer=keras.initializers.random_normal()
+))
+model.add(Dense(
+    units=100,
+    activation='relu',
+    kernel_initializer=keras.initializers.random_normal(),
+    bias_initializer=keras.initializers.random_normal()
+))
+model.add(keras.layers.Dense(
+    units=1,
+    activation='sigmoid',
+    kernel_initializer=keras.initializers.random_normal(),
+    bias_initializer=keras.initializers.random_normal()
+))
+model.compile(
+  optimizer=keras.optimizers.Adam(learning_rate=1e-5),
+  loss="binary_crossentropy",
+  metrics=['accuracy']
+)
 
-# model.fit(
-#   lil_train, 
-#   lil_trainY, 
-#   batch_size=32, 
-#   epochs=10
-# )
-# _, acc = model.evaluate(lil_test, lil_testY, verbose=0)
-# print("Acc : %.4f"%acc)
+model.fit(
+  lil_train, 
+  lil_trainY, 
+  batch_size=32, 
+  epochs=10
+)
+_, acc = model.evaluate(lil_test, lil_testY, verbose=0)
+print("Acc : %.4f"%acc)
